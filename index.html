@@ -17,6 +17,23 @@
             width: 100vw;
             height: 100vh;
             position: relative;
+            display: none; /* Inicialmente escondido */
+        }
+        #lobby {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .lobby-section {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px;
+            max-width: 400px;
         }
         .player-area {
             position: absolute;
@@ -96,9 +113,53 @@
             opacity: 0.5;
             font-size: 12px;
         }
+        input {
+            padding: 10px;
+            margin: 10px;
+            border-radius: 5px;
+            border: none;
+            width: 200px;
+        }
+        #player-list {
+            margin: 15px 0;
+        }
+        #player-list div {
+            padding: 5px;
+            background: rgba(255,255,255,0.1);
+            margin: 3px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
+    <!-- Tela de Lobby -->
+    <div id="lobby">
+        <div class="lobby-section">
+            <h1>Truco Paulista Online</h1>
+            <p>Jogue com amigos em tempo real!</p>
+        </div>
+        
+        <div id="create-section" class="lobby-section">
+            <h2>Criar Nova Sala</h2>
+            <button id="createRoom">Criar Sala</button>
+        </div>
+        
+        <div id="join-section" class="lobby-section" style="display:none;">
+            <h2>Entrar em Sala Existente</h2>
+            <input type="text" id="roomId" placeholder="Digite o ID da Sala" maxlength="4">
+            <button id="joinRoom">Entrar</button>
+        </div>
+        
+        <div id="room-info" class="lobby-section" style="display:none;">
+            <h3>Informações da Sala</h3>
+            <p>ID: <strong><span id="display-roomId">-</span></strong></p>
+            <div id="player-list"></div>
+            <p>Jogadores: <span id="player-count">1/4</span></p>
+            <p id="waiting-message">Aguardando mais jogadores...</p>
+        </div>
+    </div>
+
+    <!-- Jogo (inicialmente escondido) -->
     <div id="game-container">
         <!-- Áreas dos jogadores -->
         <div id="player1" class="player-area">
@@ -134,6 +195,305 @@
 
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
-    <script src="game.js"></script>
+    <script>
+        // Configuração do Firebase (substitua com seus dados)
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY",
+            authDomain: "SEU_PROJETO.firebaseapp.com",
+            databaseURL: "https://SEU_PROJETO.firebaseio.com",
+            projectId: "SEU_PROJETO",
+            storageBucket: "SEU_PROJETO.appspot.com",
+            messagingSenderId: "SEU_SENDER_ID",
+            appId: "SEU_APP_ID"
+        };
+
+        // Inicializa Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Variáveis do jogo
+        let roomId = "";
+        let playerId = Math.random().toString(36).substring(2, 9);
+        let playerNumber = 0;
+        let gameData = {};
+        let players = {};
+
+        // Elementos da interface
+        const lobby = document.getElementById("lobby");
+        const gameContainer = document.getElementById("game-container");
+        const createSection = document.getElementById("create-section");
+        const joinSection = document.getElementById("join-section");
+        const roomInfo = document.getElementById("room-info");
+        const displayRoomId = document.getElementById("display-roomId");
+        const playerCount = document.getElementById("player-count");
+        const playerList = document.getElementById("player-list");
+        const waitingMessage = document.getElementById("waiting-message");
+        const roomInput = document.getElementById("roomId");
+        const createRoomBtn = document.getElementById("createRoom");
+        const joinRoomBtn = document.getElementById("joinRoom");
+
+        // Cria uma nova sala
+        createRoomBtn.addEventListener("click", () => {
+            createSection.style.display = "none";
+            joinSection.style.display = "none";
+            roomInfo.style.display = "block";
+            
+            // Gera um ID de sala aleatório (4 caracteres alfanuméricos)
+            roomId = generateRoomId();
+            displayRoomId.textContent = roomId;
+            
+            // Cria a sala no Firebase
+            players = { 1: playerId };
+            database.ref(`rooms/${roomId}`).set({
+                players: players,
+                status: "waiting",
+                gameData: null
+            });
+            
+            playerNumber = 1;
+            monitorRoom();
+            
+            // Mostra opção para outros jogadores entrarem
+            joinSection.style.display = "block";
+        });
+
+        // Entra em uma sala existente
+        joinRoomBtn.addEventListener("click", () => {
+            roomId = roomInput.value.trim().toUpperCase();
+            
+            if (roomId.length !== 4) {
+                alert("ID da sala deve ter exatamente 4 caracteres!");
+                return;
+            }
+            
+            database.ref(`rooms/${roomId}`).once("value").then(snapshot => {
+                if (!snapshot.exists()) {
+                    alert("Sala não encontrada!");
+                    return;
+                }
+                
+                const room = snapshot.val();
+                if (Object.keys(room.players).length >= 4) {
+                    alert("Sala cheia! Máximo de 4 jogadores.");
+                    return;
+                }
+                
+                if (room.status !== "waiting") {
+                    alert("Esta sala já está em jogo!");
+                    return;
+                }
+                
+                createSection.style.display = "none";
+                joinSection.style.display = "none";
+                roomInfo.style.display = "block";
+                displayRoomId.textContent = roomId;
+                
+                // Determina o número do jogador
+                playerNumber = Object.keys(room.players).length + 1;
+                
+                // Adiciona o jogador à sala
+                database.ref(`rooms/${roomId}/players`).update({
+                    [playerNumber]: playerId
+                });
+                
+                monitorRoom();
+            });
+        });
+
+        // Monitora as mudanças na sala
+        function monitorRoom() {
+            database.ref(`rooms/${roomId}`).on("value", snapshot => {
+                const room = snapshot.val();
+                
+                if (!room) {
+                    alert("Sala foi fechada pelo host!");
+                    window.location.reload();
+                    return;
+                }
+                
+                // Atualiza a lista de jogadores
+                updatePlayerList(room.players);
+                
+                // Inicia o jogo quando tiver 4 jogadores
+                if (Object.keys(room.players).length === 4 && room.status === "waiting") {
+                    startGame();
+                }
+            });
+        }
+
+        // Atualiza a lista de jogadores na interface
+        function updatePlayerList(players) {
+            const playerCountNum = Object.keys(players).length;
+            playerCount.textContent = `${playerCountNum}/4`;
+            
+            playerList.innerHTML = "";
+            for (const [number, id] of Object.entries(players)) {
+                const playerElement = document.createElement("div");
+                playerElement.textContent = `Jogador ${number}: ${id === playerId ? "Você" : "Conectado"}`;
+                playerList.appendChild(playerElement);
+            }
+            
+            if (playerCountNum === 4) {
+                waitingMessage.textContent = "Sala completa! Iniciando jogo...";
+            } else {
+                waitingMessage.textContent = `Aguardando mais ${4 - playerCountNum} jogador(es)...`;
+            }
+        }
+
+        // Inicia o jogo
+        function startGame() {
+            // Atualiza o status da sala
+            database.ref(`rooms/${roomId}`).update({
+                status: "playing"
+            });
+            
+            // Só o jogador 1 (host) distribui as cartas
+            if (playerNumber === 1) {
+                const deck = createShuffledDeck();
+                const hands = {
+                    1: deck.slice(0, 3),
+                    2: deck.slice(3, 6),
+                    3: deck.slice(6, 9),
+                    4: deck.slice(9, 12)
+                };
+                
+                database.ref(`rooms/${roomId}`).update({
+                    gameData: {
+                        hands: hands,
+                        table: [],
+                        currentPlayer: 1,
+                        trucoValue: 1,
+                        round: 1
+                    }
+                });
+            }
+            
+            // Esconde o lobby e mostra o jogo
+            lobby.style.display = "none";
+            gameContainer.style.display = "block";
+            
+            // Começa a monitorar o estado do jogo
+            monitorGame();
+        }
+
+        // Monitora o estado do jogo
+        function monitorGame() {
+            database.ref(`rooms/${roomId}/gameData`).on("value", snapshot => {
+                const gameData = snapshot.val();
+                if (!gameData) return;
+                
+                updateGameUI(gameData);
+            });
+        }
+
+        // Atualiza a interface do jogo
+        function updateGameUI(gameData) {
+            // Atualiza as mãos dos jogadores
+            for (let i = 1; i <= 4; i++) {
+                updatePlayerHand(i, gameData.hands[i]);
+            }
+            
+            // Atualiza a mesa
+            updateTable(gameData.table);
+            
+            // Destaque para o jogador atual
+            document.querySelectorAll(".player-area").forEach(el => {
+                el.style.border = "none";
+            });
+            document.querySelector(`#player${gameData.currentPlayer}`).style.border = "2px solid gold";
+        }
+
+        function updatePlayerHand(playerNum, cards) {
+            const area = document.querySelector(`#player${playerNum} .hand`);
+            area.innerHTML = "";
+            
+            // Se for o jogador atual, mostra cartas clicáveis
+            if (playerNum === playerNumber) {
+                cards.forEach((card, index) => {
+                    const cardEl = createCardElement(card);
+                    cardEl.onclick = () => playCard(index);
+                    area.appendChild(cardEl);
+                });
+            } else {
+                // Para outros jogadores, mostra apenas o número de cartas
+                cards.forEach(() => {
+                    const cardBack = document.createElement("div");
+                    cardBack.className = "card";
+                    cardBack.style.background = "#333";
+                    area.appendChild(cardBack);
+                });
+            }
+        }
+
+        function updateTable(tableCards) {
+            const table = document.getElementById("table");
+            table.innerHTML = "";
+            tableCards.forEach(card => {
+                const cardEl = createCardElement(card);
+                cardEl.classList.add("card-played");
+                table.appendChild(cardEl);
+            });
+        }
+
+        function createCardElement(card) {
+            const el = document.createElement("div");
+            el.className = "card";
+            el.textContent = `${card.value}${card.suit}`;
+            
+            // Cores diferentes para naipes
+            if (card.suit === "♥" || card.suit === "♦") {
+                el.style.color = "red";
+            }
+            
+            return el;
+        }
+
+        function playCard(cardIndex) {
+            if (gameData.currentPlayer !== playerNumber) return;
+            
+            database.ref(`rooms/${roomId}/gameData`).once("value").then(snapshot => {
+                const gameData = snapshot.val();
+                const card = gameData.hands[playerNumber][cardIndex];
+                
+                // Atualiza o estado do jogo
+                database.ref(`rooms/${roomId}/gameData`).update({
+                    [`hands/${playerNumber}`]: firebase.database.ServerValue.arrayRemove(card),
+                    table: [...gameData.table, { ...card, player: playerNumber }],
+                    currentPlayer: playerNumber % 4 + 1
+                });
+            });
+        }
+
+        // Gera um ID de sala aleatório (4 letras/números)
+        function generateRoomId() {
+            const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            let result = "";
+            for (let i = 0; i < 4; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // Cria um baralho embaralhado
+        function createShuffledDeck() {
+            const suits = ["♠", "♥", "♦", "♣"];
+            const values = ["4", "5", "6", "7", "Q", "J", "K", "A", "2", "3"];
+            let deck = [];
+            
+            for (let suit of suits) {
+                for (let value of values) {
+                    deck.push({ suit, value });
+                }
+            }
+            
+            // Embaralha
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            
+            return deck;
+        }
+    </script>
 </body>
 </html>
