@@ -11,37 +11,80 @@
             background: #1a2a3a;
             color: white;
             margin: 0;
-            overflow: hidden;
+            padding: 20px;
+            text-align: center;
         }
         
-        /* Estilos do lobby e jogo aqui (mantenha seus estilos atuais) */
+        #lobby, #game-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            width: 60px;
+            height: 90px;
+            background: white;
+            border-radius: 5px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            margin: 5px;
+            color: black;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        #room-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
     <div id="lobby">
-        <div class="lobby-section">
-            <h1>Truco Paulista Online</h1>
-            <button id="createRoom">Criar Sala</button>
+        <h1>Truco Paulista Online</h1>
+        <div id="create-section">
+            <button id="createRoom">Criar Nova Sala</button>
         </div>
-        
         <div id="join-section" style="display:none;">
-            <input type="text" id="roomId" placeholder="Código da Sala" maxlength="4">
-            <button id="joinRoom">Entrar</button>
+            <input type="text" id="roomId" placeholder="Digite o código da sala" maxlength="4">
+            <button id="joinRoom">Entrar na Sala</button>
             <p id="error-msg" style="color:red;"></p>
         </div>
-        
         <div id="room-info" style="display:none;">
             <h3>Sala: <span id="room-code"></span></h3>
-            <p>Jogadores: <span id="players-count">1/4</span></p>
+            <p>Jogadores conectados: <span id="players-count">1/4</span></p>
             <div id="players-list"></div>
         </div>
     </div>
 
     <div id="game-container" style="display:none;">
-        <!-- Seu jogo atual aqui -->
+        <!-- Área do jogo será preenchida dinamicamente -->
+        <div id="table"></div>
+        <div id="player-hand"></div>
+        <div id="game-controls">
+            <button id="truco">Truco!</button>
+            <button id="accept">Aceitar</button>
+            <button id="run">Correr</button>
+        </div>
     </div>
 
+    <div id="watermark">dm</div>
+
+    <!-- Socket.io e game.js -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script src="/game.js"></script>
+    <script src="game.js"></script>
 </body>
 </html>
