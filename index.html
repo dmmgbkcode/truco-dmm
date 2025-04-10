@@ -13,12 +13,8 @@
             margin: 0;
             overflow: hidden;
         }
-        #game-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            display: none; /* Inicialmente escondido */
-        }
+        
+        /* Estilos do Lobby */
         #lobby {
             width: 100vw;
             height: 100vh;
@@ -28,6 +24,7 @@
             align-items: center;
             text-align: center;
         }
+        
         .lobby-section {
             background: rgba(0, 0, 0, 0.5);
             padding: 20px;
@@ -35,15 +32,26 @@
             margin: 10px;
             max-width: 400px;
         }
+        
+        /* Estilos do Jogo */
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            display: none;
+        }
+        
         .player-area {
             position: absolute;
             width: 200px;
             text-align: center;
         }
+        
         #player1 { bottom: 10px; left: 50%; transform: translateX(-50%); }
         #player2 { top: 10px; left: 50%; transform: translateX(-50%); }
         #player3 { left: 10px; top: 50%; transform: translateY(-50%); }
         #player4 { right: 10px; top: 50%; transform: translateY(-50%); }
+        
         .card {
             width: 60px;
             height: 90px;
@@ -60,9 +68,11 @@
             cursor: pointer;
             position: relative;
         }
+        
         .card:hover {
             transform: translateY(-10px) scale(1.05);
         }
+        
         .card-played {
             position: absolute;
             top: 50%;
@@ -71,10 +81,12 @@
             z-index: 10;
             animation: playCard 0.5s forwards;
         }
+        
         @keyframes playCard {
             0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
             100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         }
+        
         #table {
             position: absolute;
             top: 50%;
@@ -89,6 +101,7 @@
             align-items: center;
             flex-wrap: wrap;
         }
+        
         #controls {
             position: fixed;
             bottom: 20px;
@@ -97,6 +110,7 @@
             display: flex;
             gap: 10px;
         }
+        
         button {
             background: #e74c3c;
             color: white;
@@ -106,13 +120,7 @@
             cursor: pointer;
             font-weight: bold;
         }
-        #watermark {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            opacity: 0.5;
-            font-size: 12px;
-        }
+        
         input {
             padding: 10px;
             margin: 10px;
@@ -120,14 +128,29 @@
             border: none;
             width: 200px;
         }
+        
         #player-list {
             margin: 15px 0;
         }
+        
         #player-list div {
             padding: 5px;
             background: rgba(255,255,255,0.1);
             margin: 3px;
             border-radius: 3px;
+        }
+        
+        #watermark {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            opacity: 0.5;
+            font-size: 12px;
+        }
+        
+        .error-message {
+            color: #ff6b6b;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -148,6 +171,7 @@
             <h2>Entrar em Sala Existente</h2>
             <input type="text" id="roomId" placeholder="Digite o ID da Sala" maxlength="4">
             <button id="joinRoom">Entrar</button>
+            <div id="join-error" class="error-message"></div>
         </div>
         
         <div id="room-info" class="lobby-section" style="display:none;">
@@ -156,6 +180,7 @@
             <div id="player-list"></div>
             <p>Jogadores: <span id="player-count">1/4</span></p>
             <p id="waiting-message">Aguardando mais jogadores...</p>
+            <div id="room-error" class="error-message"></div>
         </div>
     </div>
 
@@ -196,7 +221,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-database-compat.js"></script>
     <script>
-        // Configuração do Firebase (substitua com seus dados)
+        // Configuração do Firebase (SUBSTITUA COM SEUS DADOS)
         const firebaseConfig = {
             apiKey: "SUA_API_KEY",
             authDomain: "SEU_PROJETO.firebaseapp.com",
@@ -213,7 +238,7 @@
 
         // Variáveis do jogo
         let roomId = "";
-        let playerId = Math.random().toString(36).substring(2, 9);
+        let playerId = Math.random().toString(36).substring(2, 9) + Date.now();
         let playerNumber = 0;
         let gameData = {};
         let players = {};
@@ -231,9 +256,12 @@
         const roomInput = document.getElementById("roomId");
         const createRoomBtn = document.getElementById("createRoom");
         const joinRoomBtn = document.getElementById("joinRoom");
+        const joinError = document.getElementById("join-error");
+        const roomError = document.getElementById("room-error");
 
         // Cria uma nova sala
         createRoomBtn.addEventListener("click", () => {
+            console.log("[DEBUG] Criando nova sala...");
             createSection.style.display = "none";
             joinSection.style.display = "none";
             roomInfo.style.display = "block";
@@ -247,67 +275,105 @@
             database.ref(`rooms/${roomId}`).set({
                 players: players,
                 status: "waiting",
-                gameData: null
+                gameData: null,
+                createdAt: firebase.database.ServerValue.TIMESTAMP
+            })
+            .then(() => {
+                console.log("[DEBUG] Sala criada com sucesso:", roomId);
+                playerNumber = 1;
+                monitorRoom();
+                
+                // Mostra opção para outros jogadores entrarem
+                joinSection.style.display = "block";
+            })
+            .catch(error => {
+                console.error("[ERRO] Falha ao criar sala:", error);
+                roomError.textContent = "Erro ao criar sala. Recarregue a página.";
             });
-            
-            playerNumber = 1;
-            monitorRoom();
-            
-            // Mostra opção para outros jogadores entrarem
-            joinSection.style.display = "block";
         });
 
         // Entra em uma sala existente
         joinRoomBtn.addEventListener("click", () => {
-            roomId = roomInput.value.trim().toUpperCase();
+            const enteredRoomId = roomInput.value.trim().toUpperCase();
+            console.log("[DEBUG] Tentando entrar na sala:", enteredRoomId);
             
-            if (roomId.length !== 4) {
-                alert("ID da sala deve ter exatamente 4 caracteres!");
+            if (enteredRoomId.length !== 4) {
+                joinError.textContent = "ID deve ter exatamente 4 caracteres!";
+                console.error("[ERRO] ID inválido:", enteredRoomId);
                 return;
             }
             
-            database.ref(`rooms/${roomId}`).once("value").then(snapshot => {
+            // Verifica se a sala existe
+            database.ref(`rooms/${enteredRoomId}`).once("value")
+            .then(snapshot => {
                 if (!snapshot.exists()) {
-                    alert("Sala não encontrada!");
+                    joinError.textContent = "Sala não encontrada!";
+                    console.error("[ERRO] Sala não existe:", enteredRoomId);
                     return;
                 }
                 
                 const room = snapshot.val();
+                
+                // Verifica se a sala está cheia
                 if (Object.keys(room.players).length >= 4) {
-                    alert("Sala cheia! Máximo de 4 jogadores.");
+                    joinError.textContent = "Sala cheia! Máximo de 4 jogadores.";
+                    console.error("[ERRO] Sala cheia:", enteredRoomId);
                     return;
                 }
                 
+                // Verifica se o jogo já começou
                 if (room.status !== "waiting") {
-                    alert("Esta sala já está em jogo!");
+                    joinError.textContent = "Esta sala já está em jogo!";
+                    console.error("[ERRO] Jogo já iniciado:", enteredRoomId);
                     return;
                 }
                 
+                // Limpa mensagens de erro
+                joinError.textContent = "";
+                roomError.textContent = "";
+                
+                // Atualiza a interface
                 createSection.style.display = "none";
                 joinSection.style.display = "none";
                 roomInfo.style.display = "block";
-                displayRoomId.textContent = roomId;
+                displayRoomId.textContent = enteredRoomId;
+                roomId = enteredRoomId;
                 
                 // Determina o número do jogador
                 playerNumber = Object.keys(room.players).length + 1;
+                console.log("[DEBUG] Jogador será o número:", playerNumber);
                 
                 // Adiciona o jogador à sala
                 database.ref(`rooms/${roomId}/players`).update({
                     [playerNumber]: playerId
+                })
+                .then(() => {
+                    console.log("[DEBUG] Jogador adicionado à sala com sucesso");
+                    monitorRoom();
+                })
+                .catch(error => {
+                    console.error("[ERRO] Falha ao entrar na sala:", error);
+                    roomError.textContent = "Erro ao entrar na sala. Tente novamente.";
                 });
-                
-                monitorRoom();
+            })
+            .catch(error => {
+                console.error("[ERRO] Falha ao verificar sala:", error);
+                joinError.textContent = "Erro ao conectar. Verifique sua internet.";
             });
         });
 
         // Monitora as mudanças na sala
         function monitorRoom() {
+            console.log("[DEBUG] Monitorando sala:", roomId);
+            
             database.ref(`rooms/${roomId}`).on("value", snapshot => {
                 const room = snapshot.val();
+                console.log("[DEBUG] Atualização recebida da sala:", room);
                 
                 if (!room) {
-                    alert("Sala foi fechada pelo host!");
-                    window.location.reload();
+                    console.error("[ERRO] Sala foi removida");
+                    roomError.textContent = "Sala foi fechada pelo host!";
+                    setTimeout(() => window.location.reload(), 3000);
                     return;
                 }
                 
@@ -316,8 +382,12 @@
                 
                 // Inicia o jogo quando tiver 4 jogadores
                 if (Object.keys(room.players).length === 4 && room.status === "waiting") {
+                    console.log("[DEBUG] Sala completa - iniciando jogo");
                     startGame();
                 }
+            }, error => {
+                console.error("[ERRO] Falha ao monitorar sala:", error);
+                roomError.textContent = "Erro de conexão. Recarregue a página.";
             });
         }
 
@@ -342,47 +412,65 @@
 
         // Inicia o jogo
         function startGame() {
+            console.log("[DEBUG] Iniciando jogo na sala:", roomId);
+            
             // Atualiza o status da sala
             database.ref(`rooms/${roomId}`).update({
-                status: "playing"
-            });
-            
-            // Só o jogador 1 (host) distribui as cartas
-            if (playerNumber === 1) {
-                const deck = createShuffledDeck();
-                const hands = {
-                    1: deck.slice(0, 3),
-                    2: deck.slice(3, 6),
-                    3: deck.slice(6, 9),
-                    4: deck.slice(9, 12)
-                };
+                status: "playing",
+                startedAt: firebase.database.ServerValue.TIMESTAMP
+            })
+            .then(() => {
+                // Só o jogador 1 (host) distribui as cartas
+                if (playerNumber === 1) {
+                    console.log("[DEBUG] Distribuindo cartas...");
+                    const deck = createShuffledDeck();
+                    const hands = {
+                        1: deck.slice(0, 3),
+                        2: deck.slice(3, 6),
+                        3: deck.slice(6, 9),
+                        4: deck.slice(9, 12)
+                    };
+                    
+                    database.ref(`rooms/${roomId}`).update({
+                        gameData: {
+                            hands: hands,
+                            table: [],
+                            currentPlayer: 1,
+                            trucoValue: 1,
+                            round: 1
+                        }
+                    });
+                }
                 
-                database.ref(`rooms/${roomId}`).update({
-                    gameData: {
-                        hands: hands,
-                        table: [],
-                        currentPlayer: 1,
-                        trucoValue: 1,
-                        round: 1
-                    }
-                });
-            }
-            
-            // Esconde o lobby e mostra o jogo
-            lobby.style.display = "none";
-            gameContainer.style.display = "block";
-            
-            // Começa a monitorar o estado do jogo
-            monitorGame();
+                // Esconde o lobby e mostra o jogo
+                lobby.style.display = "none";
+                gameContainer.style.display = "block";
+                
+                // Começa a monitorar o estado do jogo
+                monitorGame();
+            })
+            .catch(error => {
+                console.error("[ERRO] Falha ao iniciar jogo:", error);
+                roomError.textContent = "Erro ao iniciar jogo. Recarregue a página.";
+            });
         }
 
         // Monitora o estado do jogo
         function monitorGame() {
+            console.log("[DEBUG] Monitorando jogo...");
+            
             database.ref(`rooms/${roomId}/gameData`).on("value", snapshot => {
                 const gameData = snapshot.val();
-                if (!gameData) return;
+                console.log("[DEBUG] Atualização do jogo recebida:", gameData);
+                
+                if (!gameData) {
+                    console.warn("[AVISO] Dados do jogo não encontrados");
+                    return;
+                }
                 
                 updateGameUI(gameData);
+            }, error => {
+                console.error("[ERRO] Falha ao monitorar jogo:", error);
             });
         }
 
@@ -400,11 +488,17 @@
             document.querySelectorAll(".player-area").forEach(el => {
                 el.style.border = "none";
             });
-            document.querySelector(`#player${gameData.currentPlayer}`).style.border = "2px solid gold";
+            
+            const currentPlayerEl = document.querySelector(`#player${gameData.currentPlayer}`);
+            if (currentPlayerEl) {
+                currentPlayerEl.style.border = "2px solid gold";
+            }
         }
 
         function updatePlayerHand(playerNum, cards) {
             const area = document.querySelector(`#player${playerNum} .hand`);
+            if (!area) return;
+            
             area.innerHTML = "";
             
             // Se for o jogador atual, mostra cartas clicáveis
@@ -428,6 +522,7 @@
         function updateTable(tableCards) {
             const table = document.getElementById("table");
             table.innerHTML = "";
+            
             tableCards.forEach(card => {
                 const cardEl = createCardElement(card);
                 cardEl.classList.add("card-played");
@@ -449,18 +544,30 @@
         }
 
         function playCard(cardIndex) {
-            if (gameData.currentPlayer !== playerNumber) return;
+            if (gameData.currentPlayer !== playerNumber) {
+                console.warn("[AVISO] Não é o turno do jogador");
+                return;
+            }
             
-            database.ref(`rooms/${roomId}/gameData`).once("value").then(snapshot => {
+            database.ref(`rooms/${roomId}/gameData`).once("value")
+            .then(snapshot => {
                 const gameData = snapshot.val();
                 const card = gameData.hands[playerNumber][cardIndex];
                 
+                console.log("[DEBUG] Jogador jogando carta:", card);
+                
                 // Atualiza o estado do jogo
-                database.ref(`rooms/${roomId}/gameData`).update({
+                return database.ref(`rooms/${roomId}/gameData`).update({
                     [`hands/${playerNumber}`]: firebase.database.ServerValue.arrayRemove(card),
                     table: [...gameData.table, { ...card, player: playerNumber }],
                     currentPlayer: playerNumber % 4 + 1
                 });
+            })
+            .then(() => {
+                console.log("[DEBUG] Carta jogada com sucesso");
+            })
+            .catch(error => {
+                console.error("[ERRO] Falha ao jogar carta:", error);
             });
         }
 
@@ -471,6 +578,7 @@
             for (let i = 0; i < 4; i++) {
                 result += chars.charAt(Math.floor(Math.random() * chars.length));
             }
+            console.log("[DEBUG] ID gerado:", result);
             return result;
         }
 
@@ -492,8 +600,14 @@
                 [deck[i], deck[j]] = [deck[j], deck[i]];
             }
             
+            console.log("[DEBUG] Baralho criado e embaralhado");
             return deck;
         }
+
+        // Mostra opção de entrar após 3 segundos
+        setTimeout(() => {
+            joinSection.style.display = "block";
+        }, 3000);
     </script>
 </body>
 </html>
