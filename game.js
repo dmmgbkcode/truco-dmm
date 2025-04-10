@@ -1,165 +1,168 @@
-// Configurações do jogo
-const suits = ["♠", "♥", "♦", "♣"];
-const values = ["4", "5", "6", "7", "Q", "J", "K", "A", "2", "3"];
-const manilhas = ["4", "5", "6", "7", "Q", "J", "K", "A", "2", "3"]; // Ordem de força
+// Configuração do Firebase (substitua com seus dados)
+const firebaseConfig = {
+    apiKey: "SUA_API_KEY",
+    authDomain: "SEU_PROJETO.firebaseapp.com",
+    databaseURL: "https://SEU_PROJETO.firebaseio.com",
+    projectId: "SEU_PROJETO",
+    storageBucket: "SEU_PROJETO.appspot.com",
+    messagingSenderId: "SEU_SENDER_ID",
+    appId: "SEU_APP_ID"
+};
 
-let deck = [];
-let playerCards = [];
-let opponentCards = [];
-let tableCards = [];
-let currentPlayer = "player1";
-let points = { player1: 0, player2: 0 };
-let trucoValue = 1;
-let trucoActive = false;
+// Inicializa Firebase
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
 
-// Inicializa o jogo
-function initGame() {
-    createDeck();
-    shuffleDeck();
-    dealCards();
-    updateUI();
-}
+// Variáveis do jogo
+let roomId = "";
+let playerId = Math.random().toString(36).substring(2, 9);
+let playerNumber = 0; // 1-4
+let gameData = {};
 
-// Cria o baralho
-function createDeck() {
-    deck = [];
-    for (let suit of suits) {
-        for (let value of values) {
-            deck.push({ suit, value });
+// Elementos da interface
+const playerAreas = {
+    1: document.querySelector("#player1 .hand"),
+    2: document.querySelector("#player2 .hand"),
+    3: document.querySelector("#player3 .hand"),
+    4: document.querySelector("#player4 .hand")
+};
+const table = document.getElementById("table");
+
+// Conecta ao jogo
+function joinGame() {
+    roomId = prompt("Digite o ID da sala:") || "truco-default";
+    database.ref(`rooms/${roomId}`).once("value").then(snapshot => {
+        if (!snapshot.exists()) {
+            createNewGame();
+        } else {
+            connectToExistingGame(snapshot.val());
         }
-    }
+    });
 }
 
-// Embaralha as cartas
-function shuffleDeck() {
-    for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
+function createNewGame() {
+    playerNumber = 1;
+    gameData = {
+        players: { 1: playerId },
+        currentPlayer: 1,
+        hands: { 1: [], 2: [], 3: [], 4: [] },
+        table: [],
+        trucoValue: 1
+    };
+    database.ref(`rooms/${roomId}`).set(gameData);
+    startGame();
 }
 
-// Distribui as cartas
+function connectToExistingGame(data) {
+    const players = data.players;
+    if (Object.keys(players).length >= 4) {
+        alert("Sala cheia!");
+        return;
+    }
+    
+    playerNumber = Object.keys(players).length + 1;
+    players[playerNumber] = playerId;
+    
+    database.ref(`rooms/${roomId}/players`).set(players);
+    startGame();
+}
+
+function startGame() {
+    // Distribui cartas (apenas o host faz isso)
+    if (playerNumber === 1) {
+        dealCards();
+    }
+    
+    // Observa mudanças no jogo
+    database.ref(`rooms/${roomId}`).on("value", snapshot => {
+        gameData = snapshot.val();
+        updateGameUI();
+    });
+}
+
 function dealCards() {
-    playerCards = deck.slice(0, 3);
-    opponentCards = deck.slice(3, 6);
-    deck = deck.slice(6);
+    const deck = createShuffledDeck();
+    const hands = {
+        1: deck.slice(0, 3),
+        2: deck.slice(3, 6),
+        3: deck.slice(6, 9),
+        4: deck.slice(9, 12)
+    };
+    database.ref(`rooms/${roomId}/hands`).set(hands);
 }
 
-// Atualiza a interface
-function updateUI() {
-    document.getElementById("player1").textContent = `Você: ${points.player1} pontos`;
-    document.getElementById("player2").textContent = `Oponente: ${points.player2} pontos`;
-
-    // Mostra cartas do jogador
-    const playerCardsDiv = document.getElementById("player-cards");
-    playerCardsDiv.innerHTML = "";
-    playerCards.forEach((card, index) => {
-        const cardDiv = document.createElement("div");
-        cardDiv.className = "card";
-        cardDiv.textContent = `${card.value}${card.suit}`;
-        cardDiv.onclick = () => playCard(index);
-        playerCardsDiv.appendChild(cardDiv);
+function updateGameUI() {
+    // Atualiza cartas de cada jogador
+    for (let i = 1; i <= 4; i++) {
+        updatePlayerHand(i, gameData.hands[i]);
+    }
+    
+    // Atualiza mesa
+    updateTable();
+    
+    // Destaque para o jogador atual
+    document.querySelectorAll(".player-area").forEach(el => {
+        el.style.border = "none";
     });
+    document.querySelector(`#player${gameData.currentPlayer}`).style.border = "2px solid gold";
+}
 
-    // Mostra cartas na mesa
-    const tableDiv = document.getElementById("table");
-    tableDiv.innerHTML = "";
-    tableCards.forEach(card => {
-        const cardDiv = document.createElement("div");
-        cardDiv.className = "card";
-        cardDiv.textContent = `${card.value}${card.suit}`;
-        tableDiv.appendChild(cardDiv);
+function updatePlayerHand(playerNum, cards) {
+    const area = playerAreas[playerNum];
+    area.innerHTML = "";
+    
+    // Se for o jogador atual, mostra cartas clicáveis
+    if (playerNum === playerNumber) {
+        cards.forEach((card, index) => {
+            const cardEl = createCardElement(card);
+            cardEl.onclick = () => playCard(index);
+            area.appendChild(cardEl);
+        });
+    } else {
+        // Para outros jogadores, mostra apenas o número de cartas
+        cards.forEach(() => {
+            const cardBack = document.createElement("div");
+            cardBack.className = "card";
+            cardBack.style.background = "#333";
+            area.appendChild(cardBack);
+        });
+    }
+}
+
+function updateTable() {
+    table.innerHTML = "";
+    gameData.table.forEach(card => {
+        const cardEl = createCardElement(card);
+        cardEl.classList.add("card-played");
+        table.appendChild(cardEl);
     });
 }
 
-// Jogar uma carta
-function playCard(index) {
-    if (currentPlayer !== "player1") return;
-
-    const card = playerCards[index];
-    tableCards.push({ ...card, player: "player1" });
-    playerCards.splice(index, 1);
-
-    currentPlayer = "player2";
-    updateUI();
-    setTimeout(opponentPlay, 1000);
+function createCardElement(card) {
+    const el = document.createElement("div");
+    el.className = "card";
+    el.textContent = `${card.value}${card.suit}`;
+    
+    // Cores diferentes para naipes
+    if (card.suit === "♥" || card.suit === "♦") {
+        el.style.color = "red";
+    }
+    
+    return el;
 }
 
-// Jogada do oponente (IA simples)
-function opponentPlay() {
-    if (opponentCards.length === 0) return;
-
-    const randomIndex = Math.floor(Math.random() * opponentCards.length);
-    const card = opponentCards[randomIndex];
-    tableCards.push({ ...card, player: "player2" });
-    opponentCards.splice(randomIndex, 1);
-
-    currentPlayer = "player1";
-    updateUI();
-    checkRoundEnd();
+function playCard(cardIndex) {
+    if (gameData.currentPlayer !== playerNumber) return;
+    
+    const card = gameData.hands[playerNumber][cardIndex];
+    
+    // Atualiza o estado do jogo
+    database.ref(`rooms/${roomId}`).update({
+        [`hands/${playerNumber}`]: firebase.database.ServerValue.arrayRemove(card),
+        table: [...gameData.table, { ...card, player: playerNumber }],
+        currentPlayer: playerNumber % 4 + 1
+    });
 }
 
-// Verifica fim da rodada
-function checkRoundEnd() {
-    if (tableCards.length === 2) {
-        setTimeout(() => {
-            const card1 = tableCards[0];
-            const card2 = tableCards[1];
-            const winner = compareCards(card1, card2);
-            
-            if (winner === "player1") {
-                document.getElementById("message").textContent = "Você ganhou a rodada!";
-                points.player1 += trucoValue;
-            } else {
-                document.getElementById("message").textContent = "Oponente ganhou a rodada!";
-                points.player2 += trucoValue;
-            }
-
-            trucoValue = 1;
-            trucoActive = false;
-            tableCards = [];
-            updateUI();
-
-            if (playerCards.length === 0 || opponentCards.length === 0) {
-                setTimeout(initGame, 2000);
-            }
-        }, 1000);
-    }
-}
-
-// Compara cartas (lógica simplificada)
-function compareCards(card1, card2) {
-    const rank1 = manilhas.indexOf(card1.value);
-    const rank2 = manilhas.indexOf(card2.value);
-    return rank1 > rank2 ? card1.player : card2.player;
-}
-
-// Botão Truco
-document.getElementById("truco").onclick = () => {
-    if (!trucoActive) {
-        trucoActive = true;
-        trucoValue = 3;
-        document.getElementById("message").textContent = "Você pediu TRUCO!";
-    }
-};
-
-// Botão Aceitar
-document.getElementById("accept").onclick = () => {
-    if (trucoActive) {
-        document.getElementById("message").textContent = "Truco aceito! Valendo 3 pontos.";
-    }
-};
-
-// Botão Correr
-document.getElementById("run").onclick = () => {
-    if (trucoActive) {
-        points.player2 += 1;
-        document.getElementById("message").textContent = "Você correu! Oponente ganha 1 ponto.";
-        trucoActive = false;
-        trucoValue = 1;
-        updateUI();
-    }
-};
-
-// Inicia o jogo
-initGame();
+// Inicia o jogo quando a página carrega
+window.onload = joinGame;
