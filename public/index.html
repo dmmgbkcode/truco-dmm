@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truco Paulista - DM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: #1a2a3a;
+            color: white;
+            margin: 0;
+            overflow: hidden;
+        }
+        
+        /* Estilos do lobby e jogo aqui (mantenha seus estilos atuais) */
+    </style>
+</head>
+<body>
+    <div id="lobby">
+        <div class="lobby-section">
+            <h1>Truco Paulista Online</h1>
+            <button id="createRoom">Criar Sala</button>
+        </div>
+        
+        <div id="join-section" style="display:none;">
+            <input type="text" id="roomId" placeholder="Código da Sala" maxlength="4">
+            <button id="joinRoom">Entrar</button>
+            <p id="error-msg" style="color:red;"></p>
+        </div>
+        
+        <div id="room-info" style="display:none;">
+            <h3>Sala: <span id="room-code"></span></h3>
+            <p>Jogadores: <span id="players-count">1/4</span></p>
+            <div id="players-list"></div>
+        </div>
+    </div>
+
+    <div id="game-container" style="display:none;">
+        <!-- Seu jogo atual aqui -->
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="/game.js"></script>
+</body>
+</html>
